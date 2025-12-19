@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>餅乾點擊大師 - 高偉傑</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'cookie-primary': '#FFD700',
+                        'cookie-secondary': '#8B4513',
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'Microsoft JhengHei', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f7f3e8; }
+        .cookie-button { transition: transform 0.1s; filter: drop-shadow(0 15px 10px rgba(0,0,0,0.3)); }
+        .cookie-button:active { transform: scale(0.95); }
+        .cookie-icon { font-size: 12rem; line-height: 1; user-select: none; }
+        .upgrade-card:hover { transform: translateY(-3px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+    </style>
+</head>
+<body class="p-4 antialiased">
+
+    <div class="max-w-4xl mx-auto">
+        <header class="flex flex-col md:flex-row justify-between items-center p-4 bg-white rounded-xl shadow-md mb-6 border-b-4 border-cookie-primary">
+            <div class="text-xl font-black text-red-600 mb-2 md:mb-0">高偉傑</div>
+            <div class="text-center">
+                <p class="text-3xl font-extrabold text-cookie-secondary"><span id="scoreDisplay">0</span> 餅乾</p>
+                <p class="text-sm text-gray-600">每秒產量 (CPS): <span id="cpsDisplay">0.0</span></p>
+            </div>
+            <div class="text-sm text-gray-500 font-bold">點擊威力: <span id="clickPowerDisplay">1</span></div>
+        </header>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <main class="bg-white p-8 rounded-xl shadow-md flex flex-col items-center justify-center border-2 border-dashed border-gray-200">
+                <h2 class="text-2xl font-bold text-gray-800 mb-6">點擊餅乾！</h2>
+                <button id="cookieButton" class="cookie-button focus:outline-none">
+                    <span class="cookie-icon">🍪</span>
+                </button>
+                <button onclick="resetGame()" class="mt-8 text-xs text-gray-400 hover:text-red-500 underline">重設遊戲進度</button>
+            </main>
+
+            <aside class="bg-white p-6 rounded-xl shadow-md">
+                <h2 class="text-xl font-bold text-cookie-secondary border-b-2 border-cookie-primary pb-2 mb-4">餅乾商店</h2>
+                <div id="upgradesContainer" class="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                    </div>
+            </aside>
+        </div>
+    </div>
+
+    <script>
+        // 1. 初始狀態
+        let gameState = {
+            score: 0,
+            cps: 0,
+            clickPower: 1,
+            upgrades: {
+                powerFinger: { name: "強力手指", icon: "👆", count: 0, baseCost: 25, cost: 25, baseClick: 1 },
+                cursor: { name: "滑鼠", icon: "🖱️", count: 0, baseCost: 15, cost: 15, baseCps: 0.1 },
+                grandma: { name: "奶奶", icon: "👵", count: 0, baseCost: 100, cost: 100, baseCps: 1 },
+                farm: { name: "餅乾農場", icon: "🚜", count: 0, baseCost: 1100, cost: 1100, baseCps: 8 },
+                factory: { name: "工廠", icon: "🏭", count: 0, baseCost: 12000, cost: 12000, baseCps: 47 }
+            }
+        };
+
+        const COOKIE_MULTIPLIER = 1.15;
+
+        // 2. 本地讀取與儲存
+        function saveToLocal() {
+            localStorage.setItem('highWaiChieh_CookieSave', JSON.stringify(gameState));
+        }
+
+        function loadFromLocal() {
+            const saved = localStorage.getItem('highWaiChieh_CookieSave');
+            if (saved) {
+                const loadedData = JSON.parse(saved);
+                gameState.score = loadedData.score || 0;
+                Object.keys(loadedData.upgrades).forEach(key => {
+                    if (gameState.upgrades[key]) {
+                        gameState.upgrades[key].count = loadedData.upgrades[key].count;
+                        // 重新計算成本
+                        gameState.upgrades[key].cost = Math.floor(gameState.upgrades[key].baseCost * Math.pow(COOKIE_MULTIPLIER, gameState.upgrades[key].count));
+                    }
+                });
+                recalculateStats();
+            }
+        }
+
+        function resetGame() {
+            if(confirm("確定要刪除所有餅乾進度嗎？")) {
+                localStorage.removeItem('highWaiChieh_CookieSave');
+                location.reload();
+            }
+        }
+
+        // 3. 遊戲邏輯
+        function recalculateStats() {
+            let newCps = 0;
+            let newPower = 1;
+            Object.values(gameState.upgrades).forEach(u => {
+                if (u.baseCps) newCps += u.count * u.baseCps;
+                if (u.baseClick) newPower += u.count * u.baseClick;
+            });
+            gameState.cps = newCps;
+            gameState.clickPower = newPower;
+        }
+
+        function renderUI() {
+            document.getElementById('scoreDisplay').textContent = Math.floor(gameState.score).toLocaleString();
+            document.getElementById('cpsDisplay').textContent = gameState.cps.toFixed(1);
+            document.getElementById('clickPowerDisplay').textContent = gameState.clickPower;
+
+            const container = document.getElementById('upgradesContainer');
+            container.innerHTML = '';
+            Object.entries(gameState.upgrades).forEach(([key, u]) => {
+                const canAfford = gameState.score >= u.cost;
+                container.innerHTML += `
+                    <div onclick="buyUpgrade('${key}')" class="upgrade-card p-3 border rounded-lg cursor-pointer flex justify-between items-center ${canAfford ? 'bg-yellow-50' : 'bg-gray-100 opacity-50'}">
+                        <div class="flex items-center gap-3">
+                            <span class="text-2xl">${u.icon}</span>
+                            <div>
+                                <div class="font-bold text-sm">${u.name} (${u.count})</div>
+                                <div class="text-xs text-gray-500">${u.baseCps ? 'CPS +' + u.baseCps : '威力 +' + u.baseClick}</div>
+                            </div>
+                        </div>
+                        <div class="text-sm font-bold text-cookie-secondary">$${u.cost}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function buyUpgrade(key) {
+            const u = gameState.upgrades[key];
+            if (gameState.score >= u.cost) {
+                gameState.score -= u.cost;
+                u.count++;
+                u.cost = Math.floor(u.baseCost * Math.pow(COOKIE_MULTIPLIER, u.count));
+                recalculateStats();
+                renderUI();
+                saveToLocal();
+            }
+        }
+
+        // 點擊效果
+        document.getElementById('cookieButton').onclick = (e) => {
+            gameState.score += gameState.clickPower;
+            renderUI();
+            
+            // 飄浮文字
+            const tip = document.createElement('div');
+            tip.textContent = `+${gameState.clickPower}`;
+            tip.className = 'absolute text-xl font-bold text-cookie-secondary pointer-events-none';
+            tip.style.left = `${e.pageX}px`;
+            tip.style.top = `${e.pageY}px`;
+            document.body.appendChild(tip);
+            setTimeout(() => {
+                tip.style.transition = 'all 0.5s';
+                tip.style.top = `${e.pageY - 50}px`;
+                tip.style.opacity = '0';
+            }, 10);
+            setTimeout(() => tip.remove(), 600);
+        };
+
+        // 每秒增加分數
+        setInterval(() => {
+            if (gameState.cps > 0) {
+                gameState.score += gameState.cps / 10;
+                renderUI();
+            }
+        }, 100);
+
+        // 每 5 秒自動儲存
+        setInterval(saveToLocal, 5000);
+
+        // 初始化
+        loadFromLocal();
+        renderUI();
+    </script>
+</body>
+</html>
